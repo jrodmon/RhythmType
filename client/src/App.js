@@ -1,35 +1,44 @@
 import React, { useState, useEffect, useRef } from "react";
 import words from "./words.json";
+import furElise from "./musicSheets/fur_elise.json";
+import moonlight from "./musicSheets/moonlight_sonata.json";
 
 function App() {
   const [letters, setLetters] = useState([]);
   const [running, setRunning] = useState(true);
   const [currentWord, setCurrentWord] = useState("");
   const [wordColor, setWordColor] = useState("red");
-
   const spawnTimeout = useRef(null);
   const letterIndexRef = useRef(0);
   const currentXRef = useRef(0);
+  const noteIndexRef = useRef(0); // track which note to play next
 
-  const gameWidth = 1000; // horizontal width
-  const gameHeight = 600; // taller height
-  const letterSpacing = 40; // horizontal spacing
+  const gameWidth = 1000;
+  const gameHeight = 600;
+  const letterSpacing = 40;
 
-  // Pick a new random word and alternate color
+  // Map sharps to flats
+  const enharmonicMap = {
+    "C#": "Db",
+    "D#": "Eb",
+    "F#": "Gb",
+    "G#": "Ab",
+    "A#": "Bb",
+  };
+
+
+  // Pick a new random word
   const chooseNewWord = () => {
     const newWord = words[Math.floor(Math.random() * words.length)];
-
     // Wrap to left if overflow
     if (currentXRef.current + newWord.length * letterSpacing > gameWidth) {
       currentXRef.current = 0;
     }
-
     setCurrentWord(newWord);
     letterIndexRef.current = 0;
     setWordColor((prev) => (prev === "red" ? "blue" : "red"));
   };
 
-  // On first load
   useEffect(() => {
     chooseNewWord();
   }, []);
@@ -46,7 +55,7 @@ function App() {
       if (index >= currentWord.length) {
         spawnTimeout.current = setTimeout(() => {
           if (running) chooseNewWord();
-        }, 150);
+        }, 150);                    // additional delay after word completion
         return;
       }
 
@@ -64,7 +73,7 @@ function App() {
       currentXRef.current += letterSpacing;
       letterIndexRef.current = index + 1;
 
-      spawnTimeout.current = setTimeout(spawnNextLetter, 200);
+      spawnTimeout.current = setTimeout(spawnNextLetter, 300);    // Delay between each letter  
     };
 
     spawnNextLetter();
@@ -74,23 +83,22 @@ function App() {
     };
   }, [currentWord, running, wordColor]);
 
-// Move letters downward
-useEffect(() => {
-  if (!running) return;
+  // Move letters downward
+  useEffect(() => {
+    if (!running) return;
 
-  const interval = setInterval(() => {
-    setLetters((prev) =>
-      prev
-        .map((letter) => ({ ...letter, top: letter.top + 15 }))
-        .filter((letter) => letter.top < gameHeight - 15) // allow letters to reach near bottom
-    );
-  }, 50);
+    const interval = setInterval(() => {
+      setLetters((prev) =>
+        prev
+          .map((letter) => ({ ...letter, top: letter.top + 15 }))
+          .filter((letter) => letter.top < gameHeight - 15)
+      );
+    }, 50);
 
-  return () => clearInterval(interval);
-}, [running]);
+    return () => clearInterval(interval);
+  }, [running]);
 
-
-  // Handle typing + pause
+  // Handle typing + pause + play notes
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === "Escape") {
@@ -99,6 +107,7 @@ useEffect(() => {
       }
       if (!running) return;
 
+      // Remove typed letter
       setLetters((prev) => {
         const index = prev.findIndex(
           (letter) => letter.char.toLowerCase() === e.key.toLowerCase()
@@ -108,6 +117,18 @@ useEffect(() => {
         }
         return prev;
       });
+
+      // Play next note from musicSheet JSON
+      const note = furElise[noteIndexRef.current];
+      //const note = moonlight[noteIndexRef.current];
+      if (note) {
+        const audio = new Audio(`/sounds/${note}.mp3`);
+        audio.currentTime = 0;
+        audio.play();
+        noteIndexRef.current =
+          (noteIndexRef.current + 1) % furElise.length; // loop song
+          //(noteIndexRef.current + 1) % moonlight.length; // loop song
+      }
     };
 
     window.addEventListener("keydown", handleKeyDown);
@@ -156,7 +177,7 @@ useEffect(() => {
         <div
           style={{
             position: "absolute",
-            bottom: "100px",
+            bottom: "150px",
             left: 0,
             width: "100%",
             height: "4px",
