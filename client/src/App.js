@@ -3,24 +3,31 @@ import words from "./words.json";
 import { musicSheets } from "./musicSheets";
 
 function App() {
+  // =========================== State Management ============================
   const [letters, setLetters] = useState([]);
   const [running, setRunning] = useState(true);
   const [currentWord, setCurrentWord] = useState("");
   const [wordColor, setWordColor] = useState("red");
   const [currentSheetName, setCurrentSheetName] = useState("Fur Elise");
   const [currentSheet, setCurrentSheet] = useState(musicSheets["Fur Elise"]);
+  const [frozen, setFrozen] = useState(false); // to freeze the game when a letter hits the bottom or a misinput occurs
 
+  // =========================== Refs (Game Control) ============================
   const spawnTimeouts = useRef({}); // store timeouts per wordIndex
   const letterIndexRef = useRef(0);
   const currentXRef = useRef(0);
   const noteIndexRef = useRef(0); // track which note to play next
   const nextWordIndexRef = useRef(0);
   const inputLockedRef = useRef(false); // to prevent user input when making a mistake
+  const spawnPausedRef = useRef(false); // to pause spawning when a letter hits the bottom or a misinput occurs
+  const earliestLetterId = letters.length > 0 ? letters[0].id : null;
 
+  // =========================== Game Dimensions ============================
   const gameWidth = 1000;
   const gameHeight = 600;
   const letterSpacing = 40;
 
+  // =========================== Scoring / Stats ============================
   const [score, setScore] = useState(0);
   const [multiplier, setMultiplier] = useState(1);
   const [totalHits, setTotalHits] = useState(0);
@@ -31,7 +38,7 @@ function App() {
 
   const { pixelsPerInterval, delayPerMovement, pianoNotes } = currentSheet;
 
-  // Pick a new random word
+  // =========================== Word Selection ============================
   const chooseNewWord = () => {
     const newWord = words[Math.floor(Math.random() * words.length)];
     if (currentXRef.current + newWord.length * letterSpacing > gameWidth) {
@@ -42,30 +49,31 @@ function App() {
     setWordColor((prev) => (prev === "red" ? "blue" : "red"));
   };
 
+  // =========================== Initial Word Setup ============================
   useEffect(() => {
     if(running && letters.length === 0) {
       chooseNewWord();
     }
   }, [letters, running]);
 
-  // Spawn letters sequentially
+  // =========================== Letter Spawning ============================
   useEffect(() => {
     if (!currentWord) return;
 
     const wordIndex = nextWordIndexRef.current++;
 
     const spawnNextLetter = () => {
-      if (!running) return;
+      if (!running || spawnPausedRef.current || frozen) return;
 
       const index = letterIndexRef.current;
 
       if (index >= currentWord.length) {
         // Word finished spawning
         delete spawnTimeouts.current[wordIndex];
-
+        
         spawnTimeouts.current[wordIndex] = setTimeout(() => {
           if (running) chooseNewWord();
-        }, 100);
+        }, 100); // time in ms before next word spawns
         return;
       }
 
@@ -87,11 +95,23 @@ function App() {
       const charsPerMinute = wordsPerMinute * 5;
       const delayBetweenNotes = 60000 / charsPerMinute;
 
-      spawnTimeouts.current[wordIndex] = setTimeout(
-        spawnNextLetter,
-        delayBetweenNotes
-      );
+      spawnTimeouts.current[wordIndex] = setTimeout(spawnNextLetter, delayBetweenNotes );
     };
+
+    const handleMissOrFail = () => {
+      // Play miss sound
+      const missAudio = new Audio("/sounds/missSound.wav");
+      missAudio.currentTime = 0;
+      missAudio.volume = 0.7;
+      missAudio.play();
+
+      // Pause spawning for some time
+      spawnPausedRef.current = true;
+      setTimeout(() => {
+        spawnPausedRef.current = false;
+        spawnNextLetter();
+      }, 3000);
+    }
 
     spawnNextLetter();
 
@@ -100,22 +120,50 @@ function App() {
     };
   }, [currentWord, running, wordColor, currentSheet]);
 
-  // Move letters downward
+  // =========================== Letter Movement ============================
   useEffect(() => {
     if (!running) return;
 
     const interval = setInterval(() => {
-      setLetters((prev) =>
-        prev
-          .map((letter) => ({ ...letter, top: letter.top + pixelsPerInterval }))
-          .filter((letter) => letter.top < gameHeight - 1)
-      );
+      setLetters((prev) => {
+        if (frozen) return prev; // do not move letters if the game is frozen
+
+        let hitBottom = false;
+
+        // Move each letter down and check if any hit the bottom
+        const updated = prev.map((letter) => {
+          const newTop = letter.top + pixelsPerInterval;
+          if (newTop >= gameHeight - 1) hitBottom = true;
+          return { ...letter, top: newTop };
+        });
+
+        // if a letter reaches the bottom of the screen clears the screen
+        if (hitBottom) {
+          // Play miss sound
+          const missAudio = new Audio("/sounds/letterReachesBottom.wav"); //can change this audio file in the future
+          missAudio.currentTime = 0;
+          missAudio.volume = 0.7;
+          missAudio.play();
+
+          // Stop all spawning letters
+          Object.values(spawnTimeouts.current).forEach((timeout) => clearTimeout(timeout));
+          spawnTimeouts.current = {};
+
+          // Optionally reset multiplier and increment totalPossible
+          setMultiplier(1);
+          setTotalPossible((prev) => prev + 1);
+
+          return []; // remove all letters
+        }
+
+        return updated;
+      });
     }, delayPerMovement);
 
     return () => clearInterval(interval);
   }, [running, pixelsPerInterval, delayPerMovement]);
 
-  // Handle typing + pause + play notes
+  // =========================== Input Handling (Typing) ============================
   useEffect(() => {
     const handleKeyDown = (e) => {
       const ignoredKeys = [
@@ -123,18 +171,17 @@ function App() {
         "ArrowUp","ArrowDown","ArrowLeft","ArrowRight",
         "Enter","Backspace","Delete","Home","End","PageUp","PageDown",
         "Insert","NumLock","ScrollLock","Pause","PrintScreen",
-        "F1","F2","F3","F4","F5","F6","F7","F8","F9","F10","F11","F12"
+        "F1","F2","F3","F4","F5","F6","F7","F8","F9","F10","F11","F12",
+        " "
       ];
       if (ignoredKeys.includes(e.key)) return;
 
-
-      //to pause the game
+      // to pause the game
       if (e.key === "Escape") {
         setRunning((prev) => !prev);
         return;
       }
       if (!running) return;
-
 
       // to prevent user input after making a mistake
       if (inputLockedRef.current) return;
@@ -157,7 +204,7 @@ function App() {
 
         const activeWordIndex = activeLetter.wordIndex;
 
-        // if the correct key is inputted
+        // ================= Correct Key Handling =================
         if (activeLetter.char.toLowerCase() === e.key.toLowerCase()) {
           const note = pianoNotes[noteIndexRef.current];
           if (note) {
@@ -168,7 +215,7 @@ function App() {
           }
           return [...prev.slice(0, targetIndex), ...prev.slice(targetIndex + 1)];
         } else {
-          // if incorrect key is inputted
+          // ================= Incorrect Key Handling =================
           const missAudio = new Audio("/sounds/missSound.wav");
           missAudio.currentTime = 0;
           missAudio.volume = 0.7;
@@ -180,24 +227,18 @@ function App() {
           // Lock input for a short duration after making a mistake
           inputLockedRef.current = true;
           setTimeout(() => {inputLockedRef.current = false;}, 300);
-
-
-          // Stop spawning for this word
-          if (spawnTimeouts.current[activeWordIndex]) {
-            clearTimeout(spawnTimeouts.current[activeWordIndex]);
-            delete spawnTimeouts.current[activeWordIndex];
-          }
         }
 
         return prev.filter((letter) => letter.wordIndex !== activeWordIndex);
       });
     };
 
+    
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [running, pianoNotes]);
 
-  // Handle changing songs
+  // =========================== Song Change Handling ============================
   const handleSheetChange = (e) => {
     const selected = e.target.value;
     setCurrentSheetName(selected);
@@ -208,17 +249,36 @@ function App() {
     chooseNewWord();
   };
 
+  // =========================== Game Rendering ============================
   return (
-    <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", height: "100vh", backgroundColor: "#111" }}>
+    <div style={{ display: "flex", 
+    flexDirection: "column", 
+    justifyContent: "center", 
+    alignItems: "center", 
+    height: "100vh", 
+    backgroundColor: "#111" }}>
+      {/* Song Selector */}
       <select value={currentSheetName} onChange={handleSheetChange} style={{ marginBottom: "10px", fontSize: "16px" }}>
         {Object.keys(musicSheets).map((name) => (
           <option key={name} value={name}>{name}</option>
         ))}
       </select>
 
-      <div style={{ position: "relative", width: `${gameWidth}px`, height: `${gameHeight}px`, overflow: "hidden", background: "#111", color: "white", border: "2px solid #333", borderRadius: "8px" }}>
-        {letters.map((letter) => {
+      {/* Game Area */}
+      <div style={{ 
+        position: "relative", 
+        width: `${gameWidth}px`, 
+        height: `${gameHeight}px`, 
+        overflow: "hidden", 
+        background: "#111", 
+        color: "white", 
+        border: "2px solid #333", 
+        borderRadius: "8px" }}>
+        
+        {/* Letters */}
+        {letters.map((letter, idx) => {
           const borderColor = letter.wordIndex % 2 === 0 ? "red" : "blue";
+          const isEarliest = idx === 0; // to highlight the earliest letter
           return (
             <div key={letter.id} style={
               {
@@ -227,33 +287,80 @@ function App() {
                 left: letter.left,
                 fontSize: "24px",
                 fontWeight: "bold",
-                color: "black",
-                backgroundColor: "white",
+                color: isEarliest ? "black" : "#424242ff",
+                backgroundColor: isEarliest ? "white" : "gray",
+                //backgroundColor: isEarliest ? borderColor : "white", color: isEarliest ? "white" : "black",
                 padding: "6px 10px",
                 borderRadius: "6px",
                 border: `4px solid ${borderColor}`,
-                boxShadow: "0 2px 6px rgba(0,0,0,0.4)",
-                userSelect: "none" }}
+                boxShadow: isEarliest ? "0 0px 12px rgba(0,0,0,0.6)" : "0 2px 6px rgba(0, 0, 0, 0.4)",
+                userSelect: "none",
+                transform: isEarliest ? "scale(1.2)" : "scale(1)",
+                transition: "transform 0.2s ease",
+                zIndex: isEarliest ? 10 : 1}}
               >
               {letter.char}
             </div>
           );
         })}
 
-        <div style={{ position: "absolute", bottom: "150px", left: 0, width: "100%", height: "4px", backgroundColor: "orange" }} />
+        {/* Target Line */}
+        <div style={{ 
+          position: "absolute", 
+          bottom: "150px", 
+          left: 0, 
+          width: "100%", 
+          height: "4px", 
+          backgroundColor: "orange" 
+          }} />
 
-        <div style={{ position: "absolute", top: "10px", right: "10px", textAlign: "right", color: "white", fontFamily: "monospace", padding: "10px", borderRadius: "8px", backgroundColor: "rgba(0, 0, 0, 0.5)" }}>
+        {/* Score / Accuracy */}
+        <div style={{ 
+          position: "absolute", 
+          top: "10px", right: "10px", 
+          textAlign: "right", 
+          color: "white", 
+          fontFamily: "monospace", 
+          padding: "10px", 
+          borderRadius: "8px", 
+          backgroundColor: "rgba(0, 0, 0, 0.5)" }}>
           <div style={{ fontSize: "20px", fontWeight: "bold" }}>Score: {score}</div>
           <div style={{ fontSize: "16px", marginTop: "6px" }}>Accuracy: {accuracy.toFixed(1)}%</div>
         </div>
 
-        <div style={{ position: "absolute", bottom: "10px", left: "10px", color: "white", fontSize: "30px", fontWeight: "bold", fontFamily: "monospace", border: "2px solid white", padding: "6px 12px", borderRadius: "8px", backgroundColor: "rgba(0, 0, 0, 0.5)" }}>
+        {/* Multiplier */}
+        <div style={{ 
+          position: "absolute", 
+          bottom: "10px", 
+          left: "10px", 
+          color: "white", 
+          fontSize: "30px", 
+          fontWeight: "bold", 
+          fontFamily: "monospace", 
+          border: "2px solid white", 
+          padding: "6px 12px", 
+          borderRadius: "8px", 
+          backgroundColor: "rgba(0, 0, 0, 0.5)" }}>
           {multiplier}x
         </div>
 
-        {!running && <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", fontSize: "128px", color: "Black", border: "4px black solid", backgroundColor: "rgba(221, 221, 221, 0.7)" }}>PAUSED</div>}
+        {/* Paused Overlay */}
+        {!running && <div style={{ 
+          position: "absolute", 
+          top: "50%", 
+          left: "50%", 
+          transform: "translate(-50%, -50%)", 
+          fontSize: "128px", 
+          color: "Black", 
+          border: "4px black solid", 
+          backgroundColor: "rgba(221, 221, 221, 0.7)" }}>PAUSED</div>}
 
-        <button onClick={() => setRunning((prev) => !prev)} style={{ position: "absolute", top: "-50px", left: "50%", transform: "translateX(-50%)" }}>
+        {/* Pause Button */}
+        <button onClick={() => setRunning((prev) => !prev)} style={{ 
+          position: "absolute", 
+          top: "-50px", 
+          left: "50%", 
+          transform: "translateX(-50%)" }}>
           {running ? "Pause" : "Resume"}
         </button>
       </div>
