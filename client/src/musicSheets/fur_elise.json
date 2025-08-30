@@ -1,7 +1,7 @@
 {
-  "delayBetweenNotes": 200,
+  "wordsPerMinute": 100,
   "pixelsPerInterval": 2,
-  "delayPerMovement": 5,
+  "delayPerMovement": 20,
   "pianoNotes": [
     "E5", "Eb5", "E5", "Eb5", "E5",
     "B4", "D5", "C5", "A4", "C4",

@@ -1,22 +1,30 @@
 {
-  "delayBetweenNotes": 350,
-  "pixelsPerInterval": 5,
-  "delayPerMovement": 10,
+  "wordsPerMinute": 60,
+  "pixelsPerInterval": 2,
+  "delayPerMovement": 20,
   "pianoNotes": [
   "A3", "D4", "F4",
   "A3", "D4", "F4",
   "A3", "D4", "F4",
   "A3", "D4", "F4",
-  "A3", "D4", "F4",
-  "A3", "D4", "F4",
-  "A3", "D4", "F4",
-  "A3", "D4", "F4",
+
+
 
   "Bb3", "D4", "F4",
   "Bb3", "D4", "F4",
 
   "Bb3", "Eb4", "G4",
-  "Bb3", "Eb4", "G4"
+  "Bb3", "Eb4", "G4",
+
+  "A3", "Db4", "G4",
+  "A3", "D4", "F4",
+
+  "A3", "D4", "E4",
+  "G3", "Db4", "E4",
+
+  "F3", "A3", "D4",
+  "A3", "D4", "F4",
+  "A3", "D4", "F4"
   ]
 }
 
