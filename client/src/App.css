@@ -36,3 +36,16 @@
     transform: rotate(360deg);
   }
 }
+
+
+/* ================= Hit Indicator Animation ================= */
+@keyframes floatUp {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -120%) scale(1.2);
+    opacity: 0;
+  }
+}

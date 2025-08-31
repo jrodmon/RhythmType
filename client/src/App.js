@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { createRef } from "react";
 import words from "./words.json";
 import { musicSheets } from "./musicSheets";
 
@@ -20,7 +21,7 @@ function App() {
   const nextWordIndexRef = useRef(0);
   const inputLockedRef = useRef(false); // to prevent user input when making a mistake
   const spawnPausedRef = useRef(false); // to pause spawning when a letter hits the bottom or a misinput occurs
-  const earliestLetterId = letters.length > 0 ? letters[0].id : null;
+  const earliestLetterId = letters.length > 0 ? letters[0].id : null;     //this isnt ever used haha
 
   // =========================== Game Dimensions ============================
   const gameWidth = 1000;
@@ -28,18 +29,45 @@ function App() {
   const letterSpacing = 40;
 
   // =========================== Scoring / Stats ============================
-  const [score, setScore] = useState(0);
-  const [multiplier, setMultiplier] = useState(1);
-  const [totalHits, setTotalHits] = useState(0);
-  const [totalPossible, setTotalPossible] = useState(0);
+  const [score, setScore] = useState(0);                      // increments based on hit quality and multiplier
+  const [multiplier, setMultiplier] = useState(1);            // increases every 15 successful hits
+  const [totalHits, setTotalHits] = useState(0);              // increments on every successful hit
+  const [totalPossible, setTotalPossible] = useState(0);      // used for calculating accuracy
+  const [combo, setCombo] = useState(0);                      // to track current combo count
+  const [hitIndicators, setHitIndicators] = useState([]);     // to show hit quality indicators (Perfect, Good, Miss, etc.)
+
+  const targetLineY = 150; // y-position of the target line
+  const perfectWindow = 40; // range of pixels for perfect hit
+  const okWindow = 60; // range of pixels for ok hit
+  const badWindow = 90; // range of pixels for bad hit
+
+  const scoreValues = {
+    perfect: 300,
+    ok: 100,
+    bad: 50,
+    miss: 0,
+  }
 
   const accuracy =
     totalPossible > 0 ? (totalHits / totalPossible) * 100 : 100;
+
+  const showHitIndicator = (type, x, y) => {
+    const id = Date.now() + Math.random();
+    setHitIndicators((prev) => [...prev, { id, type, x, y }]);
+
+    setTimeout(() => {
+      setHitIndicators((prev) => prev.filter((ind) => ind.id !== id));
+    }, 800); // indicator lasts for 800ms
+  }
+
+
 
   const { pixelsPerInterval, delayPerMovement, pianoNotes } = currentSheet;
 
   // =========================== Word Selection ============================
   const chooseNewWord = () => {
+    if (!running) return;
+
     const newWord = words[Math.floor(Math.random() * words.length)];
     if (currentXRef.current + newWord.length * letterSpacing > gameWidth) {
       currentXRef.current = 0;
@@ -79,13 +107,16 @@ function App() {
 
       const newLeft = currentXRef.current;
 
+      // =================== Create new letter ===================
       const newLetter = {
         id: Date.now() + Math.random(),
         char: currentWord[index].toUpperCase(),
         top: 0,
         left: newLeft,
         wordIndex,
+        ref: createRef(), // createRef for dynamically reading the size of each letter
       };
+      // ==========================================================
 
       setLetters((prev) => [...prev, newLetter]);
       currentXRef.current += letterSpacing;
@@ -163,90 +194,184 @@ function App() {
     return () => clearInterval(interval);
   }, [running, pixelsPerInterval, delayPerMovement]);
 
-  // =========================== Input Handling (Typing) ============================
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      const ignoredKeys = [
-        "Shift","CapsLock","Tab","Control","Alt","Meta",
-        "ArrowUp","ArrowDown","ArrowLeft","ArrowRight",
-        "Enter","Backspace","Delete","Home","End","PageUp","PageDown",
-        "Insert","NumLock","ScrollLock","Pause","PrintScreen",
-        "F1","F2","F3","F4","F5","F6","F7","F8","F9","F10","F11","F12",
-        " "
-      ];
-      if (ignoredKeys.includes(e.key)) return;
 
-      // to pause the game
-      if (e.key === "Escape") {
-        setRunning((prev) => !prev);
-        return;
-      }
-      if (!running) return;
 
-      // to prevent user input after making a mistake
-      if (inputLockedRef.current) return;
 
-      setLetters((prev) => {
-        if (prev.length === 0) return prev;
 
-        // Find active letter (lowest on screen)
-        let targetIndex = -1;
-        let maxTop = -1;
-        prev.forEach((letter, idx) => {
-          if (letter.top > maxTop) {
-            maxTop = letter.top;
-            targetIndex = idx;
-          }
-        });
 
-        const activeLetter = prev[targetIndex];
-        if (!activeLetter) return prev;
 
-        const activeWordIndex = activeLetter.wordIndex;
 
-        // ================= Correct Key Handling =================
-        if (activeLetter.char.toLowerCase() === e.key.toLowerCase()) {
-          const note = pianoNotes[noteIndexRef.current];
-          if (note) {
-            const audio = new Audio(`/sounds/${note}.mp3`);
-            audio.currentTime = 0;
-            audio.play();
-            noteIndexRef.current = (noteIndexRef.current + 1) % pianoNotes.length;
-          }
-          return [...prev.slice(0, targetIndex), ...prev.slice(targetIndex + 1)];
-        } else {
-          // ================= Incorrect Key Handling =================
-          const missAudio = new Audio("/sounds/missSound.wav");
-          missAudio.currentTime = 0;
-          missAudio.volume = 0.7;
-          missAudio.play();
 
-          setMultiplier(1);
-          setTotalPossible((prev) => prev + 1);
 
-          // Lock input for a short duration after making a mistake
-          inputLockedRef.current = true;
-          setTimeout(() => {inputLockedRef.current = false;}, 300);
+
+// =========================== Input Handling (Typing) ============================
+useEffect(() => {
+  const handleKeyDown = (e) => {
+    const ignoredKeys = [
+      "Shift","CapsLock","Tab","Control","Alt","Meta",
+      "ArrowUp","ArrowDown","ArrowLeft","ArrowRight",
+      "Enter","Backspace","Delete","Home","End","PageUp","PageDown",
+      "Insert","NumLock","ScrollLock","Pause","PrintScreen",
+      "F1","F2","F3","F4","F5","F6","F7","F8","F9","F10","F11","F12",
+      " "
+    ];
+    if (ignoredKeys.includes(e.key)) return;
+
+    // Toggle pause
+    if (e.key === "Escape") {
+      setRunning(prev => !prev);
+      return;
+    }
+    if (!running) return;
+
+    // Prevent input after mistake
+    if (inputLockedRef.current) return;
+
+    setLetters(prev => {
+      if (prev.length === 0) return prev;
+
+      // Find active letter (lowest on screen)
+      let targetIndex = -1;
+      let maxTop = -1;
+      prev.forEach((letter, idx) => {
+        if (letter.top > maxTop) {
+          maxTop = letter.top;
+          targetIndex = idx;
         }
-
-        return prev.filter((letter) => letter.wordIndex !== activeWordIndex);
       });
-    };
 
-    
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [running, pianoNotes]);
+      const activeLetter = prev[targetIndex];
+      if (!activeLetter || !activeLetter.ref.current) return prev;
+
+      const gameArea = document.getElementById("game-area");
+      if (!gameArea) return prev;
+
+      const gameRect = gameArea.getBoundingClientRect();
+      const letterRect = activeLetter.ref.current.getBoundingClientRect();
+      const letterX = letterRect.left + letterRect.width / 2 - gameRect.left;
+      const letterY = letterRect.top + letterRect.height / 2 - gameRect.top;
+
+      const isCorrectKey = activeLetter.char.toLowerCase() === e.key.toLowerCase();
+
+      // ================= Incorrect Key Handling (Incorrect Letter) =================
+      if (!isCorrectKey) {
+        showHitIndicator("!!", letterX, letterY);
+        const missAudio = new Audio("/sounds/missSound.wav");
+        missAudio.currentTime = 0;
+        missAudio.volume = 0.7;
+        missAudio.play();
+
+        //setFrozen(true);
+        //setTimeout(() => setFrozen(false), 300);
+
+        setMultiplier(1);
+        setCombo(0);
+        setTotalPossible(prev => prev + 1);
+
+        // Lock input briefly
+        inputLockedRef.current = true;
+        setTimeout(() => { inputLockedRef.current = false; }, 300);
+
+        // Remove the active letter even on misinput
+        return prev.filter(letter => letter.wordIndex !== activeLetter.wordIndex);
+      }
+
+      // ================= Correct Key Handling =================
+      const letterCenterY = letterRect.top + letterRect.height / 2;
+      const targetLineY = gameRect.bottom - 150; // 150px from bottom
+      const distance = Math.abs(letterCenterY - targetLineY);
+
+      let hitQuality = "miss"; // default
+      if (distance <= perfectWindow) hitQuality = "perfect";
+      else if (distance <= okWindow) hitQuality = "ok";
+      else if (distance <= badWindow) hitQuality = "bad";
+      
+      // Play miss sound if it's a miss
+      if (hitQuality === "miss") {
+        showHitIndicator("X", letterX, letterY);
+        const missAudio = new Audio("/sounds/missSound.wav");
+        missAudio.currentTime = 0;
+        missAudio.volume = 0.7;
+        missAudio.play();
+
+        setMultiplier(1);
+        setCombo(0);
+
+        //return prev.filter(letter => letter.wordIndex !== activeLetter.wordIndex);      // removes the whole word if a "miss" occurs
+        return prev.filter((letter, idx) => idx !== targetIndex);                       //removes only the active letter if a "miss occurs"
+      }
+
+      // Show hit indicator
+      showHitIndicator(hitQuality, letterX, letterY);
+
+      // Play note if not a miss
+      if (hitQuality !== "miss") {
+        const note = pianoNotes[noteIndexRef.current];
+        if (note) {
+          const audio = new Audio(`/sounds/${note}.mp3`);
+          audio.currentTime = 0;
+          audio.play();
+          noteIndexRef.current = (noteIndexRef.current + 1) % pianoNotes.length;
+        }
+      }
+
+      // ================= Scoring =================
+      if (hitQuality === "miss") {
+        setFrozen(true);
+        setTimeout(() => setFrozen(false), 300);
+        setMultiplier(1);
+        setCombo(0);
+      } else {
+        const points = scoreValues[hitQuality];
+        setScore(prev => prev + points * multiplier);
+        setCombo(prev => {
+          const newCombo = prev + 1;
+          if (newCombo % 15 === 0) setMultiplier(prevMult => prevMult + 1);
+          return newCombo;
+        });
+        setTotalHits(prev => prev + 1);
+      }
+      setTotalPossible(prev => prev + 1);
+
+      // Remove letter from screen
+      return [...prev.slice(0, targetIndex), ...prev.slice(targetIndex + 1)];
+    });
+  };
+
+  window.addEventListener("keydown", handleKeyDown);
+  return () => window.removeEventListener("keydown", handleKeyDown);
+}, [running, pianoNotes]);
+
+
+
+
+
+
+
+
+
 
   // =========================== Song Change Handling ============================
   const handleSheetChange = (e) => {
     const selected = e.target.value;
     setCurrentSheetName(selected);
     setCurrentSheet(musicSheets[selected]);
+
+    // Reset game state
     noteIndexRef.current = 0;
-    setLetters([]);
+    letterIndexRef.current = 0;
+    nextWordIndexRef.current = 0;
     currentXRef.current = 0;
-    chooseNewWord();
+
+    Object.values(spawnTimeouts.current).forEach(clearTimeout);
+    spawnTimeouts.current = {};
+    
+    setCurrentWord("");
+    setLetters([]);
+    
+    if (running) {
+      setTimeout(() => chooseNewWord(), 0); 
+    }
   };
 
   // =========================== Game Rendering ============================
@@ -265,95 +390,147 @@ function App() {
       </select>
 
       {/* Game Area */}
-      <div style={{ 
-        position: "relative", 
-        width: `${gameWidth}px`, 
-        height: `${gameHeight}px`, 
-        overflow: "hidden", 
-        background: "#111", 
-        color: "white", 
-        border: "2px solid #333", 
-        borderRadius: "8px" }}>
+      <div
+        id = "game-area"
+          style={{ 
+          position: "relative", 
+          width: `${gameWidth}px`, 
+          height: `${gameHeight}px`, 
+          overflow: "hidden", 
+          background: "#111", 
+          color: "white", 
+          border: "2px solid #333", 
+          borderRadius: "8px" }}>
         
-        {/* Letters */}
-        {letters.map((letter, idx) => {
-          const borderColor = letter.wordIndex % 2 === 0 ? "red" : "blue";
-          const isEarliest = idx === 0; // to highlight the earliest letter
-          return (
-            <div key={letter.id} style={
-              {
+          {/* Letters */}
+          {letters.map((letter, idx) => {
+            const borderColor = letter.wordIndex % 2 === 0 ? "red" : "blue";
+            const isEarliest = idx === 0; // to highlight the earliest letter
+            return (
+              <div 
+              key={letter.id} 
+              ref={letter.ref}  // createRef for dynamically reading the size of each letter
+              style={
+                {
+                  position: "absolute",
+                  top: letter.top,
+                  left: letter.left,
+                  fontSize: "24px",
+                  fontWeight: "bold",
+                  color: isEarliest ? "black" : "#424242ff",
+                  backgroundColor: isEarliest ? "white" : "gray",
+                  //backgroundColor: isEarliest ? borderColor : "white", color: isEarliest ? "white" : "black",
+                  padding: "6px 10px",
+                  borderRadius: "6px",
+                  border: `4px solid ${borderColor}`,
+                  boxShadow: isEarliest ? "0 0px 12px rgba(0,0,0,0.6)" : "0 2px 6px rgba(0, 0, 0, 0.4)",
+                  userSelect: "none",
+                  transform: isEarliest ? "scale(1.2)" : "scale(1)",
+                  transition: "transform 0.2s ease",
+                  zIndex: isEarliest ? 10 : 1}}
+                >
+                {letter.char}
+              </div>
+            );
+          })}
+
+          {/* Hit Indicators */}
+          {hitIndicators.map(ind => (
+            <div
+              key={ind.id}
+              style={{
                 position: "absolute",
-                top: letter.top,
-                left: letter.left,
+                left: ind.x,
+                top: ind.y,
+                transform: "translate(-50%, -50%)",
+                color: ind.type === "perfect" ? "#00ff00" :
+                      ind.type === "ok" ? "#ffff00" :
+                      ind.type === "bad" ? "#ff9900" :
+                      "#ff0000",
+                fontWeight: "500",
                 fontSize: "24px",
-                fontWeight: "bold",
-                color: isEarliest ? "black" : "#424242ff",
-                backgroundColor: isEarliest ? "white" : "gray",
-                //backgroundColor: isEarliest ? borderColor : "white", color: isEarliest ? "white" : "black",
-                padding: "6px 10px",
-                borderRadius: "6px",
-                border: `4px solid ${borderColor}`,
-                boxShadow: isEarliest ? "0 0px 12px rgba(0,0,0,0.6)" : "0 2px 6px rgba(0, 0, 0, 0.4)",
-                userSelect: "none",
-                transform: isEarliest ? "scale(1.2)" : "scale(1)",
-                transition: "transform 0.2s ease",
-                zIndex: isEarliest ? 10 : 1}}
-              >
-              {letter.char}
+                textShadow: "0 0 2px black",
+                pointerEvents: "none",
+                zIndex: 1000,
+                opacity: 0.8,
+                animation: "floatUp 0.8s ease-out forwards"
+              }}
+            >
+              {ind.type === "perfect" ? "O" : ind.type === "miss" ? "X" : ind.type.toUpperCase()}
+
             </div>
-          );
-        })}
+          ))}
 
-        {/* Target Line */}
-        <div style={{ 
-          position: "absolute", 
-          bottom: "150px", 
-          left: 0, 
-          width: "100%", 
-          height: "4px", 
-          backgroundColor: "orange" 
-          }} />
 
-        {/* Score / Accuracy */}
-        <div style={{ 
-          position: "absolute", 
-          top: "10px", right: "10px", 
-          textAlign: "right", 
-          color: "white", 
-          fontFamily: "monospace", 
-          padding: "10px", 
-          borderRadius: "8px", 
-          backgroundColor: "rgba(0, 0, 0, 0.5)" }}>
-          <div style={{ fontSize: "20px", fontWeight: "bold" }}>Score: {score}</div>
-          <div style={{ fontSize: "16px", marginTop: "6px" }}>Accuracy: {accuracy.toFixed(1)}%</div>
-        </div>
+          {/* Target Line */}
+          <div style={{ 
+            position: "absolute", 
+            bottom: "150px", 
+            left: 0, 
+            width: "100%", 
+            height: "4px", 
+            backgroundColor: "orange" ,
+            zIndex: 999
+            }} />
 
-        {/* Multiplier */}
-        <div style={{ 
-          position: "absolute", 
-          bottom: "10px", 
-          left: "10px", 
-          color: "white", 
-          fontSize: "30px", 
-          fontWeight: "bold", 
-          fontFamily: "monospace", 
-          border: "2px solid white", 
-          padding: "6px 12px", 
-          borderRadius: "8px", 
-          backgroundColor: "rgba(0, 0, 0, 0.5)" }}>
-          {multiplier}x
+          {/* Score / Accuracy */}
+          <div style={{ 
+            position: "absolute", 
+            top: "10px", right: "10px", 
+            textAlign: "right", 
+            color: "white", 
+            fontFamily: "monospace", 
+            padding: "10px", 
+            borderRadius: "8px", 
+            backgroundColor: "rgba(0, 0, 0, 0.5)",
+            zIndex: 999
+          }}
+            >
+            <div style={{ fontSize: "20px", fontWeight: "bold" }}>Score: {score}</div>
+            <div style={{ fontSize: "16px", marginTop: "6px" }}>Accuracy: {accuracy.toFixed(1)}%</div>
+          </div>
+
+          {/* Multiplier */}
+          <div style={{ 
+            position: "absolute", 
+            bottom: "10px", 
+            left: "10px", 
+            color: "white", 
+            fontSize: "30px", 
+            fontWeight: "bold", 
+            fontFamily: "monospace", 
+            border: "2px solid white", 
+            padding: "6px 12px", 
+            borderRadius: "8px", 
+            backgroundColor: "rgba(0, 0, 0, 0.5)" }}>
+            {multiplier}x
         </div>
 
         {/* Paused Overlay */}
-        {!running && <div style={{ 
-          position: "absolute", 
-          top: "50%", 
-          left: "50%", 
-          transform: "translate(-50%, -50%)", 
-          fontSize: "128px", 
-          color: "Black", 
-          border: "4px black solid", 
-          backgroundColor: "rgba(221, 221, 221, 0.7)" }}>PAUSED</div>}
+        {!running && 
+        <div 
+            style=
+              {
+                { 
+                  position: "absolute",
+                  top: "50%",
+                  left: "50%",
+                  transform: "translate(-50%, -50%)",
+                  fontSize: "128px",
+                  color: "Black",
+                  border: "4px black solid",
+                  backgroundColor: "rgba(221, 221, 221, 0.7)",
+                  padding: "20px 40px",
+                  borderRadius: "12px",
+                  boxShadow: "0 0 20px rgba(0,0,0,0.5)",
+                  userSelect: "none",
+                  zIndex: 1000
+                }
+              }
+          >
+            PAUSED
+            </div>
+          }
 
         {/* Pause Button */}
         <button onClick={() => setRunning((prev) => !prev)} style={{ 
