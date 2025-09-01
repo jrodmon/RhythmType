@@ -1,0 +1,10 @@
+{
+    "wordsPerMinute": 100,
+    "pixelsPerInterval": 2,
+    "delayPerMovement": 20,
+    "pianoNotes": [
+        "E3", "B3", "G3",
+        "E3", "B3", "G3"
+
+    ]
+}

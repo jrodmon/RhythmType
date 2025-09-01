@@ -3,6 +3,11 @@ import { createRef } from "react";
 import words from "./words.json";
 import { musicSheets } from "./musicSheets";
 
+const formatScore = (num) => {
+  return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+
+};
+
 function App() {
   // =========================== State Management ============================
   const [letters, setLetters] = useState([]);
@@ -253,6 +258,15 @@ useEffect(() => {
 
       const isCorrectKey = activeLetter.char.toLowerCase() === e.key.toLowerCase();
 
+      /*
+        Different cases
+        1. Misinput (incorrect key is pressed)
+        2. Correct Key + miss (correct key is pressed but it is not close enough to the target line)
+        3. Correct key + bad (correct key is pressed but far from target line)
+        4. Correct key + ok (correct key is pressed and is somewhat near target line)
+        5. Correct key + perfect (correct key is pressed at satisfactory position)
+      */
+
       // ================= Incorrect Key Handling (Incorrect Letter) =================
       if (!isCorrectKey) {
         showHitIndicator("!!", letterX, letterY);
@@ -486,7 +500,7 @@ useEffect(() => {
             zIndex: 999
           }}
             >
-            <div style={{ fontSize: "20px", fontWeight: "bold" }}>Score: {score}</div>
+            <div style={{ fontSize: "20px", fontWeight: "bold" }}>Score: {formatScore(score)}</div>
             <div style={{ fontSize: "16px", marginTop: "6px" }}>Accuracy: {accuracy.toFixed(1)}%</div>
           </div>
 

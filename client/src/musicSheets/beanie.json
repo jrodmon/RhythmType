@@ -1,0 +1,27 @@
+{
+    "wordsPerMinute": 80,
+    "pixelsPerInterval": 2,
+    "delayPerMovement": 6,
+    "pianoNotes": [
+        "E5", "A4", "Gb4", "A4", "Gb4", "A4",
+        "E5", "A4", "Gb4", "A4", "Gb4", "A4",
+
+        "Eb5", "A4", "Gb4", "A4", "Gb4", "A4",
+        "Eb5", "A4", "Gb4", "A4", "Gb4", "A4",
+
+        "Eb5", "Ab4", "E4", "Ab4", "E4", "Ab4",
+        "Eb5", "Ab4", "E4", "Ab4", "E4", "Ab4",
+
+        "Db5", "Ab4", "E4", "Ab4", "E4", "Ab4",
+        "Db5", "Ab4", "E4", "Ab4", "E4", "Ab4",
+
+
+        "Eb5", "E5", "Gb5", "Ab5", "E5", "Db5",  "E5"
+
+
+
+    ]
+
+}
+
+
